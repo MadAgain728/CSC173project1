@@ -1,1 +1,17 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
 
+typedef struct {
+    int set_of_states;              // set of states in DFA
+    int* accept_states;          // Array of accept states
+    int** transition_function;      // Transition function (** for 2D array)
+    int initial_state;             // Initial state
+    int set_accepting_states;       // Number of accept states
+} DFA;
+
+int main(int argc, const char * argv[]) {
+    
+    return 0;
+}
