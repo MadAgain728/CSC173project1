@@ -3,13 +3,34 @@
 #include <stdbool.h>
 #include <string.h>
 
-typedef struct {
+typedef struct 
+{
     int set_of_states;              // set of states in DFA
     int* accept_states;          // Array of accept states
     int** transition_function;      // Transition function (** for 2D array)
     int initial_state;             // Initial state
     int set_accepting_states;       // Number of accept states
 } DFA;
+
+DFA* DFA_create(int set_of_states, int* accept_states, int set_accepting_states, int initial_state) 
+{
+    DFA* dfa = (DFA*)malloc(sizeof(DFA));
+    dfa->set_of_states = set_of_states;
+    dfa->accept_states = accept_states;
+    dfa->set_accepting_states = set_accepting_states;
+    dfa->initial_state = initial_state;
+   
+    dfa->transition_function = (int**)malloc(set_of_states * sizeof(int*));
+    for (int i = 0; i < set_of_states; i++)
+    {
+        dfa->transition_function[i] = (int*)malloc(128 * sizeof(int)); // ASCII inputs (from 0 to 128)
+        for (int j = 0; j < 128; j++)
+        {
+            dfa->transition_function[i][j] = -1; // Initialize all to -1 (invalid transition)
+        }
+    }
+    return dfa;
+}
 
 int main(int argc, const char * argv[]) {
     
