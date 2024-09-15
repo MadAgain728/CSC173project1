@@ -23,10 +23,15 @@ DFA* CreateDFA(int set_of_states, int* accept_states, int set_accepting_states, 
 {
     DFA* dfa = (DFA*)malloc(sizeof(DFA));
     dfa->set_of_states = set_of_states;
-    dfa->accept_states = accept_states;
+    //dfa->accept_states = accept_states;
     dfa->set_accepting_states = set_accepting_states;
     dfa->initial_state = initial_state;
    
+    dfa->accept_states = (int*)malloc(set_accepting_states * sizeof(int));
+        for (int i = 0; i < set_accepting_states; i++) {
+            dfa->accept_states[i] = accept_states[i];
+        }
+    
     dfa->transition_function = (int**)malloc(set_of_states * sizeof(int*));
     for (int i=0; i<set_of_states; i++) // Allocate memory for each state in the transition function
     {
@@ -47,6 +52,7 @@ bool checkState(DFA* dfa, int state)
     for (int i=0; i<dfa->set_accepting_states; i++)
     {
         if (dfa->accept_states[i]==state) return true;
+        //printf("%d\n", state);
     }
     return false;
 }
