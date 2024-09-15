@@ -99,15 +99,50 @@ DFA* DFA_xyzzy(void)
     return dfa;
 }
 
-int main(int argc, const char * argv[]) 
+DFA* DFA_987(void) {
+    int accept_states[] = {3}; // State 3 is the accepting state
+    DFA* dfa = CreateDFA(4, accept_states, 1, 0);
+
+    //State 0
+    setTransition(dfa, '9', 0, 1); // Move to state 1 on '9'
+    for (int i = 0; i < 128; i++) if (i != '9') setTransition(dfa, (char)i, 0, 0); // Stay in state 0 on any input except '9'
+
+    //State 1
+    setTransition(dfa, '8', 1, 2); // Move to state 2 on '8'
+    setTransition(dfa, '9', 1, 1); // Stay in state 1 on '9'
+    for (int i = 0; i < 128; i++) if (i != '8' && i != '9') setTransition(dfa, (char)i, 1, 1); // Stay in state 1 on any input except '8'
+
+    //State 2
+    setTransition(dfa, '7', 2, 3); // Move to state 3 (accepting) on '7'
+    setTransition(dfa, '9', 2, 1); // Move back to state 1 on '9'
+    setTransition(dfa, '8', 2, 2); // Stay in state 2 on '8'
+    for (int i = 0; i < 128; i++) if (i != '7' && i != '9' && i != '8') setTransition(dfa, (char)i, 2, 2); // Stay in state 2 on any input except '7', '9', '8'
+
+    //State 3
+    for (int i = 0; i < 128; i++) setTransition(dfa, (char)i, 3, 3); // Stay in state 3 on any input
+    return dfa;
+}
+
+int main(int argc, const char * argv[])
 {
+    //DFA (a) Exactly the string "xyzzy"
+    
     printf("Testing DFA that recognizes exactly 'xyzzy':\n");
     DFA* dfa_a = DFA_xyzzy();
     DFA_repl(dfa_a);
 
-    for (int i = 0; i<dfa_a->set_of_states; i++) free(dfa_a->transition_function[i]); //free memory?
+    for (int i = 0; i<dfa_a->set_of_states; i++) free(dfa_a->transition_function[i]); //free memory
     free(dfa_a->transition_function);
     free(dfa_a);
+    
+    //DFA (b) contains 9, 8, 7 in order
+    printf("Testing DFA that recognizes '9, 8, and 7 in order':\n");
+    DFA* dfa_b = DFA_987();
+    DFA_repl(dfa_b);
+
+    for (int i = 0; i<dfa_b->set_of_states; i++) free(dfa_b->transition_function[i]);
+    free(dfa_b->transition_function);
+    free(dfa_b);
     
     return 0;
 }
