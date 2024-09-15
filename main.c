@@ -154,34 +154,48 @@ NFA *NFA_for_ends_with_gh() {
 
   NFA_add_transition(nfa, 0, 'g', 1);
   NFA_add_transition(nfa, 1, 'h', 2);
+
+  for (char c = 'a'; c <= 'z'; c++) {
+    NFA_add_transition(
+        nfa, 2, c, 0); // return to state 0 from state 2 if not end of string
+  }
+
   NFA_set_accepting(nfa, 2, true); // Accepting state is 2
   return nfa;
 }
 
-// Recursive function to check if the NFA accepts the input string
-bool NFA_run_helper(NFA *nfa, int state, const char *input) {
-  if (*input == '\0') { // End of the string
-    return NFA_is_accepting(nfa,
-                            state); // Check if the current state is accepting
-  }
+bool NFA_run(NFA *nfa, char *input) {
+  bool current_states[100] = {false};
+  current_states[0] = true;
 
-  // Try all possible transitions for the current symbol
-  bool accepted = false;
-  for (int target_state = 0; target_state < nfa->num_states; target_state++) {
-    if (nfa->transition_function[state][(unsigned char)*input][target_state]) {
-      accepted |= NFA_run_helper(nfa, target_state,
-                                 input + 1); // Recurse for the next state
+  for (int i = 0; i < strlen(input); i++) {
+    char symbol = input[i];
+    bool next_states[100] = {false};
+
+    for (int state = 0; state < nfa->num_states; state++) {
+      if (current_states[state]) {
+        for (int next_state = 0; next_state < nfa->num_states; next_state++) {
+          if (nfa->transition_function[state][symbol][next_state]) {
+            next_states[next_state] = true;
+          }
+        }
+      }
+    }
+
+    for (int state = 0; state < nfa->num_states; state++) {
+      current_states[state] = next_states[state];
     }
   }
-  return accepted;
+
+  for (int state = 0; state < nfa->num_states; state++) {
+    if (current_states[state] && nfa->accepting_states[state]) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
-// Function to run the NFA on the input string
-bool NFA_run(NFA *nfa, char *input) {
-  return NFA_run_helper(nfa, 0, input); // Start from state 0
-}
-
-// Function to run the NFA in a REPL loop
 void NFA_repl(NFA *nfa) {
   char input[256];
   while (true) {
@@ -199,16 +213,12 @@ void NFA_repl(NFA *nfa) {
   }
 }
 
-// Main function
 int main() {
-  // Create the NFA that accepts strings ending with "gh"
   NFA *nfa_ends_with_gh = NFA_for_ends_with_gh();
 
-  // Run the NFA in a REPL
   printf("NFA for strings ending with 'gh':\n");
   NFA_repl(nfa_ends_with_gh);
 
-  // Free the allocated memory
   free(nfa_ends_with_gh);
 
   return 0;
