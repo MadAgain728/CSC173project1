@@ -95,103 +95,121 @@ DFA *DFA_xyzzy(void) {
   return dfa;
 }
 
-// Definition of the NFA data structure
 typedef struct {
-    int num_states;
-    bool transition_function[100][256][100]; // transition_function[state][char][next_state]
-    bool accepting_states[100]; // Array to track which states are accepting
+  int num_states;
+  bool transition_function
+      [100][128][100];        // transition_function[state][char][target_state]
+  bool accepting_states[100]; // Array to track which states are accepting
 } NFA;
 
 // Function to create a new empty NFA with a given number of states
-NFA* NFA_new(int num_states) {
-    NFA* nfa = malloc(sizeof(NFA));
-    nfa->num_states = num_states;
-    memset(nfa->transition_function, 0, sizeof(nfa->transition_function));
-    memset(nfa->accepting_states, false, sizeof(nfa->accepting_states));
-    return nfa;
-}
+NFA *NFA_create(int num_states) {
+  NFA *nfa = malloc(sizeof(NFA));
 
-// Function to add a transition between states in the NFA
-void NFA_add_transition(NFA* nfa, int from_state, char symbol, int to_state) {
-    nfa->transition_function[from_state][(unsigned char)symbol][to_state] = true;
-}
+  // Check if memory allocation was successful
+  if (nfa == NULL) {
+    return NULL;
+  }
 
-// Function to set an accepting state
-void NFA_set_accepting(NFA* nfa, int state, bool is_accepting) {
-    nfa->accepting_states[state] = is_accepting;
-}
+  nfa->num_states = num_states;
 
-// Function to check if a state is accepting
-bool NFA_is_accepting(NFA* nfa, int state) {
-    return nfa->accepting_states[state];
-}
-
-// Function to create an NFA that accepts strings ending with "ing"
-NFA* NFA_for_ends_with_gh() {
-    NFA* nfa = NFA_new(4); // 4 states (0, 1, 2, 3)
-
-    for (char c = 'a'; c <= 'z'; c++) {
-        if (c != 'g') {
-            NFA_add_transition(nfa, 0, c, 0); // stay in state 0
-        }
+  // Initialize the transition function to false
+  for (int i = 0; i < num_states; i++) {
+    for (int j = 0; j < 128; j++) {
+      for (int k = 0; k < num_states; k++) {
+        nfa->transition_function[i][j][k] = false;
+      }
     }
+  }
 
-    NFA_add_transition(nfa, 0, 'g', 1);
-    NFA_add_transition(nfa, 1, 'h', 2);
-    NFA_set_accepting(nfa, 2, true); // Accepting state is 3
-    return nfa;
+  // Initialize the accepting states to false
+  for (int i = 0; i < num_states; i++) {
+    nfa->accepting_states[i] = false;
+  }
+
+  return nfa;
+}
+
+void NFA_add_transition(NFA *nfa, int current_state, char symbol,
+                        int target_state) {
+  nfa->transition_function[current_state][symbol][target_state] = true;
+}
+
+void NFA_set_accepting(NFA *nfa, int state, bool is_accepting) {
+  nfa->accepting_states[state] = is_accepting;
+}
+
+bool NFA_is_accepting(NFA *nfa, int state) {
+  return nfa->accepting_states[state];
+}
+
+NFA *NFA_for_ends_with_gh() {
+  NFA *nfa = NFA_create(3);
+
+  for (char c = 'a'; c <= 'z'; c++) {
+    if (c != 'g') {
+      NFA_add_transition(nfa, 0, c, 0); // stay in state 0 if not 'g'
+    }
+  }
+
+  NFA_add_transition(nfa, 0, 'g', 1);
+  NFA_add_transition(nfa, 1, 'h', 2);
+  NFA_set_accepting(nfa, 2, true); // Accepting state is 2
+  return nfa;
 }
 
 // Recursive function to check if the NFA accepts the input string
-bool NFA_run_helper(NFA* nfa, int state, const char* input) {
-    if (*input == '\0') { // End of the string
-        return NFA_is_accepting(nfa, state); // Check if the current state is accepting
-    }
+bool NFA_run_helper(NFA *nfa, int state, const char *input) {
+  if (*input == '\0') { // End of the string
+    return NFA_is_accepting(nfa,
+                            state); // Check if the current state is accepting
+  }
 
-    // Try all possible transitions for the current symbol
-    bool accepted = false;
-    for (int next_state = 0; next_state < nfa->num_states; next_state++) {
-        if (nfa->transition_function[state][(unsigned char)*input][next_state]) {
-            accepted |= NFA_run_helper(nfa, next_state, input + 1); // Recurse for the next state
-        }
+  // Try all possible transitions for the current symbol
+  bool accepted = false;
+  for (int target_state = 0; target_state < nfa->num_states; target_state++) {
+    if (nfa->transition_function[state][(unsigned char)*input][target_state]) {
+      accepted |= NFA_run_helper(nfa, target_state,
+                                 input + 1); // Recurse for the next state
     }
-    return accepted;
+  }
+  return accepted;
 }
 
 // Function to run the NFA on the input string
-bool NFA_run(NFA* nfa, const char* input) {
-    return NFA_run_helper(nfa, 0, input); // Start from state 0
+bool NFA_run(NFA *nfa, char *input) {
+  return NFA_run_helper(nfa, 0, input); // Start from state 0
 }
 
 // Function to run the NFA in a REPL loop
-void NFA_repl(NFA* nfa) {
-    char input[256];
-    while (true) {
-        printf("Enter a string (or 'exit' to quit): ");
-        scanf("%s", input);
-        if (strcmp(input, "exit") == 0) {
-            break;
-        }
-        bool result = NFA_run(nfa, input);
-        if (result) {
-            printf("The NFA accepted the string: %s\n", input);
-        } else {
-            printf("The NFA rejected the string: %s\n", input);
-        }
+void NFA_repl(NFA *nfa) {
+  char input[256];
+  while (true) {
+    printf("Enter a string (or 'exit' to quit): ");
+    scanf("%s", input);
+    if (strcmp(input, "exit") == 0) {
+      break;
     }
+    bool result = NFA_run(nfa, input);
+    if (result) {
+      printf("The NFA accepted the string: %s\n", input);
+    } else {
+      printf("The NFA rejected the string: %s\n", input);
+    }
+  }
 }
 
 // Main function
 int main() {
-    // Create the NFA that accepts strings ending with "gh"
-    NFA* nfa_ends_with_gh = NFA_for_ends_with_gh();
+  // Create the NFA that accepts strings ending with "gh"
+  NFA *nfa_ends_with_gh = NFA_for_ends_with_gh();
 
-    // Run the NFA in a REPL
-    printf("NFA for strings ending with 'gh':\n");
-    NFA_repl(nfa_ends_with_gh);
+  // Run the NFA in a REPL
+  printf("NFA for strings ending with 'gh':\n");
+  NFA_repl(nfa_ends_with_gh);
 
-    // Free the allocated memory
-    free(nfa_ends_with_gh);
+  // Free the allocated memory
+  free(nfa_ends_with_gh);
 
-    return 0;
+  return 0;
 }
