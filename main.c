@@ -99,7 +99,8 @@ DFA* DFA_xyzzy(void)
     return dfa;
 }
 
-DFA* DFA_987(void) {
+DFA* DFA_987(void) 
+{
     int accept_states[] = {3}; // State 3 is the accepting state
     DFA* dfa = CreateDFA(4, accept_states, 1, 0);
 
@@ -123,6 +124,53 @@ DFA* DFA_987(void) {
     return dfa;
 }
 
+DFA* DFA_4(void)
+{ 
+    int accept_states[] = {2, 3}; // Accept state 2 and 3
+    DFA* dfa = CreateDFA(5, accept_states, 2, 0); // 5 states in total
+
+    setTransition(dfa, '4', 0, 1); // Transitions for state 0 (no '4' yet)
+    for (int i = 0; i < 128; i++) if (i != '4') setTransition(dfa, (char)i, 0, 0);
+
+    setTransition(dfa, '4', 1, 2); //second '4'
+    for (int i = 0; i < 128; i++) if (i != '4') setTransition(dfa, (char)i, 1, 1);
+
+    setTransition(dfa, '4', 2, 3); //third '4'
+    for (int i = 0; i < 128; i++) if (i != '4') setTransition(dfa, (char)i, 2, 2);
+
+    //three '4's
+    setTransition(dfa, '4', 3, 4);
+    for (int i = 0; i < 128; i++) if (i != '4') setTransition(dfa, (char)i, 3, 3);
+
+    //more than three '4's
+    for (int i = 0; i < 128; i++) setTransition(dfa, (char)i, 4, 4); // Stay in state 4+not accepting
+    return dfa;
+
+}
+
+DFA* DFA_bit(void)
+{
+    int accept_states[] = {3}; //"11" is the accepting state
+    DFA* dfa = CreateDFA(4, accept_states, 1, 0); // 4 states: "00", "01", "10", "11"
+
+    // State 0 -- "00" (even 0's & even 1's)
+    setTransition(dfa, '0', 0, 2); // Move to state "10" on '0'
+    setTransition(dfa, '1', 0, 1); // Move to state "01" on '1'
+
+    // State 1 -- "01" (even 0's & odd 1's)
+    setTransition(dfa, '0', 1, 3); // Move to state "11" on '0'
+    setTransition(dfa, '1', 1, 0); // Move to state "00" on '1'
+
+    // State 2 -- "10" (odd 0's & even 1's)
+    setTransition(dfa, '0', 2, 0); // Move to state "00" on '0'
+    setTransition(dfa, '1', 2, 3); // Move to state "11" on '1'
+
+    // State 3 -- "11" (odd 0's & odd 1's) -> accepting state
+    setTransition(dfa, '0', 3, 1); // Move to state "01" on '0'
+    setTransition(dfa, '1', 3, 2); // Move to state "10" on '1'
+    return dfa;
+}
+
 int main(int argc, const char * argv[])
 {
     //DFA (a) Exactly the string "xyzzy"
@@ -143,6 +191,24 @@ int main(int argc, const char * argv[])
     for (int i = 0; i<dfa_b->set_of_states; i++) free(dfa_b->transition_function[i]);
     free(dfa_b->transition_function);
     free(dfa_b);
+    
+    //DFA (c) contains two or three 4
+    printf("Testing DFA that contains two or three 4:\n");
+    DFA* dfa_c = DFA_4();
+    DFA_repl(dfa_c);
+
+    for (int i = 0; i<dfa_c->set_of_states; i++) free(dfa_c->transition_function[i]);
+    free(dfa_c->transition_function);
+    free(dfa_c);
+    
+    //DFA (d) binary input
+    printf("Testing DFA that are an odd numbe of '0's and also an odd number of '1's :\n");
+    DFA* dfa_d = DFA_bit();
+    DFA_repl(dfa_d);
+
+    for (int i = 0; i<dfa_d->set_of_states; i++) free(dfa_d->transition_function[i]);
+    free(dfa_d->transition_function);
+    free(dfa_d);
     
     return 0;
 }
