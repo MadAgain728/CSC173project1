@@ -157,6 +157,29 @@ DFA *DFA_4(void) {
   return dfa;
 }
 
+DFA* DFA_bit(void)
+{
+  int accept_states[] = {3}; //"11" is the accepting state
+  DFA* dfa = CreateDFA(4, accept_states, 1, 0); // 4 states: "00", "01", "10", "11"
+
+  // State 0 -- "00" (even 0's & even 1's)
+  setTransition(dfa, '0', 0, 2); // Move to state "10" on '0'
+  setTransition(dfa, '1', 0, 1); // Move to state "01" on '1'
+
+  // State 1 -- "01" (even 0's & odd 1's)
+  setTransition(dfa, '0', 1, 3); // Move to state "11" on '0'
+  setTransition(dfa, '1', 1, 0); // Move to state "00" on '1'
+
+  // State 2 -- "10" (odd 0's & even 1's)
+  setTransition(dfa, '0', 2, 0); // Move to state "00" on '0'
+  setTransition(dfa, '1', 2, 3); // Move to state "11" on '1'
+
+  // State 3 -- "11" (odd 0's & odd 1's) -> accepting state
+  setTransition(dfa, '0', 3, 1); // Move to state "01" on '0'
+  setTransition(dfa, '1', 3, 2); // Move to state "10" on '1'
+  return dfa;
+}
+
 typedef struct {
   int num_states;
   bool transition_function
@@ -486,118 +509,99 @@ void NFA_repl(NFA *nfa) {
   }
 }
 
+#define MAX_STATES 100
+#define MAX_ALPHABET 128
 
-// Helper function prototypes for epsilon closure and move
-int* epsilon_closure(NFA* nfa, int* states, int num_states, int* result_size);
-int* move(NFA* nfa, int* states, int num_states, char symbol, int* result_size);
+// Function to compute the subset transition in NFA
+void compute_nfa_transition(NFA *nfa, bool *current_set, char symbol, bool *next_set) {
+    int symbol_index = (int)symbol;
+    for (int i = 0; i < nfa->num_states; i++) {
+        if (current_set[i]) {  // If state i is in the current DFA state (subset of NFA states)
+            for (int j = 0; j < nfa->num_states; j++) {
+                if (nfa->transition_function[i][symbol_index][j]) {
+                    next_set[j] = true;  // Include state j in the next DFA state
+                }
+            }
+        }
+    }
+}
 
-// Convert NFA to DFA using subset construction
-DFA* NFA_to_DFA(NFA* nfa) {
-    // Create a new DFA
-    DFA* dfa = CreateDFA(nfa->num_states * MAX_STATES, NULL, 0, 0); // estimate max DFA states
+// Find or create a new DFA state based on the subset of NFA states
+int find_or_create_state(DFA *dfa, bool *state_set, int **state_mapping, int *dfa_state_count) {
+    for (int i = 0; i < *dfa_state_count; i++) {
+        bool match = true;
+        for (int j = 0; j < MAX_STATES; j++) {
+            if (state_mapping[i][j] != state_set[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            return i;  // Existing DFA state found
+        }
+    }
 
-    // Track DFA states created from NFA state sets
+    // Create a new DFA state
+    for (int j = 0; j < MAX_STATES; j++) {
+        state_mapping[*dfa_state_count][j] = state_set[j];
+    }
+    (*dfa_state_count)++;
+    return *dfa_state_count - 1;
+}
+
+// NFA to DFA conversion function
+DFA *NFA_to_DFA(NFA *nfa) {
+    bool state_mapping[MAX_STATES][MAX_STATES] = {false};  // DFA states as subsets of NFA states
     int dfa_state_count = 0;
-    int* dfa_states[MAX_STATES]; // Array to hold NFA state sets
-    int dfa_state_sizes[MAX_STATES]; // Number of states in each set
-    bool dfa_accepting[MAX_STATES]; // Track accepting DFA states
 
-    // Worklist to process DFA states
-    int worklist[MAX_STATES];
-    int worklist_size = 0;
+    int *dfa_accept_states = (int *)malloc(MAX_STATES * sizeof(int));
+    int accept_state_count = 0;
 
-    // Start with the epsilon closure of NFA's start state
-    int start_set[MAX_STATES];
-    int start_set_size;
-    int* start_closure = epsilon_closure(nfa, &nfa->initial_state, 1, &start_set_size);
-    dfa_states[dfa_state_count] = start_closure;
-    dfa_state_sizes[dfa_state_count] = start_set_size;
-    worklist[worklist_size++] = dfa_state_count;
+    // DFA will start with the subset of NFA's start state
+    bool start_set[MAX_STATES] = {false};
+    start_set[0] = true;  // Assuming NFA starts at state 0
 
-    // Mark DFA state as accepting if any NFA state in the set is accepting
-    dfa_accepting[dfa_state_count] = false;
-    for (int i = 0; i < start_set_size; i++) {
-        if (NFA_is_accepting(nfa, start_closure[i])) {
-            dfa_accepting[dfa_state_count] = true;
-            break;
-        }
+    DFA *dfa = CreateDFA(MAX_STATES, dfa_accept_states, accept_state_count, 0);
+
+    int **state_mapping_ptr = (int **)malloc(MAX_STATES * sizeof(int *));
+    for (int i = 0; i < MAX_STATES; i++) {
+        state_mapping_ptr[i] = (int *)malloc(MAX_STATES * sizeof(int));
+        memset(state_mapping_ptr[i], 0, MAX_STATES * sizeof(int));
     }
-    dfa_state_count++;
 
-    // Process each DFA state in the worklist
-    while (worklist_size > 0) {
-        int current_dfa_state = worklist[--worklist_size];
-        int* current_set = dfa_states[current_dfa_state];
-        int current_set_size = dfa_state_sizes[current_dfa_state];
+    int start_dfa_state = find_or_create_state(dfa, start_set, state_mapping_ptr, &dfa_state_count);
+    dfa->initial_state = start_dfa_state;
 
-        // For each symbol, compute the DFA transition
-        for (int symbol = 0; symbol < MAX_SYMBOLS; symbol++) {
-            int next_set[MAX_STATES];
-            int next_set_size;
-            int* next_closure = move(nfa, current_set, current_set_size, symbol, &next_set_size);
+    for (int i = 0; i < dfa_state_count; i++) {
+        for (char symbol = 0; symbol < MAX_ALPHABET; symbol++) {
+            bool next_set[MAX_STATES] = {false};
+            compute_nfa_transition(nfa, state_mapping_ptr[i], symbol, next_set);
 
-            if (next_set_size > 0) {
-                // Check if the new set of NFA states already exists in the DFA
-                int next_dfa_state = -1;
-                for (int i = 0; i < dfa_state_count; i++) {
-                    if (dfa_state_sizes[i] == next_set_size && memcmp(dfa_states[i], next_closure, next_set_size * sizeof(int)) == 0) {
-                        next_dfa_state = i;
-                        break;
-                    }
-                }
-
-                // If the new DFA state doesn't exist, add it
-                if (next_dfa_state == -1) {
-                    next_dfa_state = dfa_state_count++;
-                    dfa_states[next_dfa_state] = next_closure;
-                    dfa_state_sizes[next_dfa_state] = next_set_size;
-                    worklist[worklist_size++] = next_dfa_state;
-
-                    // Mark DFA state as accepting if any NFA state in the set is accepting
-                    dfa_accepting[next_dfa_state] = false;
-                    for (int i = 0; i < next_set_size; i++) {
-                        if (NFA_is_accepting(nfa, next_closure[i])) {
-                            dfa_accepting[next_dfa_state] = true;
-                            break;
-                        }
-                    }
-                }
-                setTransition(dfa, symbol, current_dfa_state, next_dfa_state);
+            int next_dfa_state = find_or_create_state(dfa, next_set, state_mapping_ptr, &dfa_state_count);
+            if (memcmp(next_set, (bool[MAX_STATES]){false}, MAX_STATES * sizeof(bool)) != 0) {
+                setTransition(dfa, symbol, i, next_dfa_state);
             }
         }
     }
-    return dfa;
-}
 
-// Epsilon closure helper function
-int* epsilon_closure(NFA* nfa, int* states, int num_states, int* result_size) {
-    static int closure[MAX_STATES];
-    bool visited[MAX_STATES] = {false};
-
-    int closure_size = 0;
-    for (int i = 0; i < num_states; i++) {
-        closure[closure_size++] = states[i];
-        visited[states[i]] = true;
-    }
-    *result_size = closure_size;
-    return closure;
-}
-
-// Move function to compute the set of NFA states reachable by a symbol
-int* move(NFA* nfa, int* states, int num_states, char symbol, int* result_size) {
-    static int next_set[MAX_STATES];
-    int next_size = 0;
-
-    for (int i = 0; i < num_states; i++) {
+    // Identify and set DFA accepting states
+    for (int i = 0; i < dfa_state_count; i++) {
         for (int j = 0; j < nfa->num_states; j++) {
-            if (nfa->transition_function[states[i]][(int)symbol][j]) {
-                next_set[next_size++] = j;
+            if (state_mapping_ptr[i][j] && nfa->accepting_states[j]) {
+                dfa_accept_states[accept_state_count++] = i;
+                break;
             }
         }
     }
 
-    *result_size = next_size;
-    return next_set;
+    dfa->set_accepting_states = accept_state_count;
+    free(dfa_accept_states);
+    for (int i = 0; i < MAX_STATES; i++) {
+        free(state_mapping_ptr[i]);
+    }
+    free(state_mapping_ptr);
+
+    return dfa;
 }
 
 
@@ -655,7 +659,6 @@ int main() {
   printf("Testing NFA for strings ending with 'gh':\n");
   NFA_repl(nfa_a);
   printf("\n");
-
   free(nfa_a);
 
   // NFA (b) contains 'moo'
@@ -665,7 +668,6 @@ int main() {
   NFA_repl(nfa_b);
   printf("\n");
 
-  free(nfa_b);
 
   // NFA (c) contains more than one 'a' or 'i', or more than two 'y's, or more
   // than 3 'c's or 'l's
@@ -677,7 +679,24 @@ int main() {
   NFA_repl(nfa_c);
   printf("\n");
 
-  free(nfa_c);
+
+  // PART 3: NFA to DFA Conversion Output
+  printf("Part 3: NFA to DFA Conversion\n");
+
+  // Assuming you have implemented the NFA for strings ending in "gh" (NFA_a)
+  printf("Converting NFA (strings ending with 'gh') to DFA...\n");
+
+  // Convert the NFA to a DFA
+  DFA *dfa_from_nfa_gh = NFA_to_DFA(nfa_a);
+
+  printf("abc");
+
+  // Print the number of states in the resulting DFA
+  printf("DFA for strings ending with 'gh' has %d states.\n", dfa_from_nfa_gh->set_of_states);
+
+  // Run the DFA using the REPL function for user input
+  printf("Testing the converted DFA (for strings ending with 'gh'):\n");
+  DFA_repl(dfa_from_nfa_gh);
 
   return 0;
 }
