@@ -157,6 +157,29 @@ DFA *DFA_4(void) {
   return dfa;
 }
 
+DFA *DFA_bit(void) {
+  int accept_states[] = {3}; //"11" is the accepting state
+  DFA *dfa =
+      CreateDFA(4, accept_states, 1, 0); // 4 states: "00", "01", "10", "11"
+
+  // State 0 -- "00" (even 0's & even 1's)
+  setTransition(dfa, '0', 0, 2); // Move to state "10" on '0'
+  setTransition(dfa, '1', 0, 1); // Move to state "01" on '1'
+
+  // State 1 -- "01" (even 0's & odd 1's)
+  setTransition(dfa, '0', 1, 3); // Move to state "11" on '0'
+  setTransition(dfa, '1', 1, 0); // Move to state "00" on '1'
+
+  // State 2 -- "10" (odd 0's & even 1's)
+  setTransition(dfa, '0', 2, 0); // Move to state "00" on '0'
+  setTransition(dfa, '1', 2, 3); // Move to state "11" on '1'
+
+  // State 3 -- "11" (odd 0's & odd 1's) -> accepting state
+  setTransition(dfa, '0', 3, 1); // Move to state "01" on '0'
+  setTransition(dfa, '1', 3, 2); // Move to state "10" on '1'
+  return dfa;
+}
+
 typedef struct {
   int num_states;
   bool transition_function
@@ -206,7 +229,7 @@ bool NFA_is_accepting(NFA *nfa, int state) {
 }
 
 // NFA ends with 'gh'
-NFA *NFA_a() {
+NFA *NFA_a(void) {
   NFA *nfa = NFA_create(3);
 
   for (char c = 'a'; c <= 'z'; c++) {
@@ -227,7 +250,7 @@ NFA *NFA_a() {
   return nfa;
 }
 
-NFA *NFA_b() {
+NFA *NFA_b(void) {
   NFA *nfa = NFA_create(4);
 
   for (char c = 'a'; c <= 'z'; c++) {
@@ -248,7 +271,7 @@ NFA *NFA_b() {
   return nfa;
 }
 
-NFA *NFA_c() {
+NFA *NFA_c(void) {
   NFA *nfa = NFA_create(16);
 
   for (char c = 'a'; c <= 'z'; c++) {
@@ -486,48 +509,166 @@ void NFA_repl(NFA *nfa) {
   }
 }
 
-int main() {
+#define MAX_STATES 100
+#define MAX_ALPHABET 128
+
+void compute_nfa_transition(NFA *nfa, int *current_set, int symbol,
+                            int *next_set) {
+  int symbol_index = symbol;
+
+  for (int i = 0; i < nfa->num_states; i++) {
+    if (current_set[i] == 1) { // Ensure this NFA state is valid
+      for (int j = 0; j < nfa->num_states; j++) {
+        if (nfa->transition_function[i][symbol_index][j]) {
+          next_set[j] = 1; // Valid next state
+        }
+      }
+    }
+  }
+}
+
+// Find or create a new DFA state based on the subset of NFA states
+int find_or_create_state(DFA *dfa, int *state_set, int **state_mapping,
+                         int *dfa_state_count) {
+  // Loop through existing DFA states to see if we have already created a state
+  // for this subset
+  for (int i = 0; i < *dfa_state_count; i++) {
+    bool match = true;
+    for (int j = 0; j < MAX_STATES; j++) {
+      if (state_mapping[i][j] != state_set[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      return i; // If a matching DFA state is found, return its index
+    }
+  }
+
+  // Store the new DFA state's mapping
+  for (int j = 0; j < MAX_STATES; j++) {
+    state_mapping[*dfa_state_count][j] = state_set[j];
+  }
+
+  (*dfa_state_count)++; // Increment the DFA state count
+
+  return *dfa_state_count - 1;
+}
+
+// NFA to DFA conversion function
+DFA *NFA_to_DFA(NFA *nfa) {
+  // Allocate state mapping dynamically
+  int **state_mapping_ptr = malloc(MAX_STATES * sizeof(int *));
+  for (int i = 0; i < MAX_STATES; i++) {
+    state_mapping_ptr[i] =
+        calloc(MAX_STATES, sizeof(int)); // Use calloc to initialize
+  }
+
+  int dfa_state_count = 0;
+  int *dfa_accept_states = (int *)malloc(MAX_STATES * sizeof(int));
+  int accept_state_count = 0;
+
+  // DFA will start with the subset of NFA's start state
+  int *start_set = calloc(MAX_STATES, sizeof(int)); // Start set on heap
+  start_set[0] = 1; // Assuming NFA starts at state 0
+
+  DFA *dfa = CreateDFA(MAX_STATES, dfa_accept_states, accept_state_count, 0);
+
+  // Map the starting DFA state
+  int start_dfa_state =
+      find_or_create_state(dfa, start_set, state_mapping_ptr, &dfa_state_count);
+  dfa->initial_state = start_dfa_state;
+
+  // Free the start_set after use
+  free(start_set);
+
+  // Iterate over DFA states to define transitions
+  for (int i = 0; i < dfa_state_count; i++) {
+    for (int symbol = 0; symbol < MAX_ALPHABET; symbol++) {
+      int *next_set =
+          calloc(MAX_STATES, sizeof(int)); // Allocate next_set on heap
+      // Compute the transition set for the current symbol
+      compute_nfa_transition(nfa, state_mapping_ptr[i], symbol, next_set);
+
+      // Find or create the DFA state for this transition
+      int next_dfa_state = find_or_create_state(
+          dfa, next_set, state_mapping_ptr, &dfa_state_count);
+      if (memcmp(next_set, (int[MAX_STATES]){false},
+                 MAX_STATES * sizeof(int)) != 0) {
+        setTransition(dfa, symbol, i, next_dfa_state);
+      }
+
+      // Free next_set after processing
+      free(next_set);
+    }
+  }
+
+  // Identify and set DFA accepting states
+  for (int i = 0; i < dfa_state_count; i++) {
+    for (int j = 0; j < nfa->num_states; j++) {
+      if (state_mapping_ptr[i][j] && nfa->accepting_states[j]) {
+        dfa_accept_states[accept_state_count++] = i;
+        break;
+      }
+    }
+  }
+
+  // Set the accepting states count in the DFA
+  dfa->set_accepting_states = accept_state_count;
+
+  // Free dynamically allocated memory
+  for (int i = 0; i < MAX_STATES; i++) {
+    free(state_mapping_ptr[i]);
+  }
+  free(state_mapping_ptr);
+  free(dfa_accept_states);
+
+  return dfa;
+}
+
+int main(void) {
   // DFA (a) exactly the string "xyzzy"
   printf("Testing DFA that recognizes exactly 'xyzzy':\n");
   DFA *dfa_a = DFA_xyzzy();
   DFA_repl(dfa_a);
   printf("\n");
-
+  
   for (int i = 0; i < dfa_a->set_of_states; i++)
     free(dfa_a->transition_function[i]); // free memory
   free(dfa_a->transition_function);
   free(dfa_a);
-
+  
   // DFA (b) contains 9, 8, 7 in order
   printf("Testing DFA that recognizes '9, 8, and 7 in order':\n");
   DFA *dfa_b = DFA_987();
   DFA_repl(dfa_b);
   printf("\n");
-
+  
   for (int i = 0; i < dfa_b->set_of_states; i++)
     free(dfa_b->transition_function[i]);
   free(dfa_b->transition_function);
   free(dfa_b);
-
+  
   // DFA (c) contains two or three 4
   printf("Testing DFA that contains two or three 4:\n");
   DFA *dfa_c = DFA_4();
   DFA_repl(dfa_c);
   printf("\n");
-
+  
   for (int i = 0; i < dfa_c->set_of_states; i++) {
     free(dfa_c->transition_function[i]);
   }
   free(dfa_c->transition_function);
   free(dfa_c);
-
+  
   // DFA (d) binary input
-  printf("Testing DFA that are an odd numbe of '0's and also an odd number of "
+  printf("Testing DFA that are an odd numbe of '0's and also an odd number of
+  "
          "'1's :\n");
   DFA *dfa_d = DFA_bit();
   DFA_repl(dfa_d);
   printf("\n");
-
+  
   for (int i = 0; i < dfa_d->set_of_states; i++) {
     free(dfa_d->transition_function[i]);
   }
@@ -541,16 +682,12 @@ int main() {
   NFA_repl(nfa_a);
   printf("\n");
 
-  free(nfa_a);
-
   // NFA (b) contains 'moo'
   NFA *nfa_b = NFA_b();
 
   printf("Testing NFA for strings containing 'moo':\n");
   NFA_repl(nfa_b);
   printf("\n");
-
-  free(nfa_b);
 
   // NFA (c) contains more than one 'a' or 'i', or more than two 'y's, or more
   // than 3 'c's or 'l's
@@ -562,7 +699,24 @@ int main() {
   NFA_repl(nfa_c);
   printf("\n");
 
-  free(nfa_c);
+  // PART 3: NFA to DFA Conversion Output
+  printf("Part 3: NFA to DFA Conversion\n");
+
+  // Assuming you have implemented the NFA for strings ending in "gh" (NFA_a)
+  printf("Converting NFA (strings ending with 'gh') to DFA...\n");
+
+  // Convert the NFA to a DFA
+  DFA *dfa_from_nfa_gh = NFA_to_DFA(nfa_a);
+
+  printf("abc");
+
+  // Print the number of states in the resulting DFA
+  printf("DFA for strings ending with 'gh' has %d states.\n",
+         dfa_from_nfa_gh->set_of_states);
+
+  // Run the DFA using the REPL function for user input
+  printf("Testing the converted DFA (for strings ending with 'gh'):\n");
+  DFA_repl(dfa_from_nfa_gh);
 
   return 0;
 }
