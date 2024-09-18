@@ -229,7 +229,7 @@ bool NFA_is_accepting(NFA *nfa, int state) {
 }
 
 // NFA ends with 'gh'
-NFA *NFA_a() {
+NFA *NFA_a(void) {
   NFA *nfa = NFA_create(3);
 
   for (char c = 'a'; c <= 'z'; c++) {
@@ -250,7 +250,7 @@ NFA *NFA_a() {
   return nfa;
 }
 
-NFA *NFA_b() {
+NFA *NFA_b(void) {
   NFA *nfa = NFA_create(4);
 
   for (char c = 'a'; c <= 'z'; c++) {
@@ -271,7 +271,7 @@ NFA *NFA_b() {
   return nfa;
 }
 
-NFA *NFA_c() {
+NFA *NFA_c(void) {
   NFA *nfa = NFA_create(16);
 
   for (char c = 'a'; c <= 'z'; c++) {
@@ -611,6 +611,7 @@ DFA *NFA_to_DFA(NFA *nfa) {
 
     // Set the accepting states count in the DFA
     dfa->set_accepting_states = accept_state_count;
+    dfa->set_of_states = dfa_state_count;
 
     // Free dynamically allocated memory
     for (int i = 0; i < MAX_STATES; i++) {
@@ -623,7 +624,7 @@ DFA *NFA_to_DFA(NFA *nfa) {
 }
 
 
-int main() {
+int main(void) {
   // // DFA (a) exactly the string "xyzzy"
   // printf("Testing DFA that recognizes exactly 'xyzzy':\n");
   // DFA *dfa_a = DFA_xyzzy();
