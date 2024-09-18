@@ -513,12 +513,10 @@ void NFA_repl(NFA *nfa) {
 #define MAX_ALPHABET 128
 
 void compute_nfa_transition(NFA *nfa, int *current_set, int symbol, int *next_set) {
-    int symbol_index = symbol;
-
     for (int i = 0; i < nfa->num_states; i++) {
         if (current_set[i]==1) {  // Ensure this NFA state is valid
             for (int j = 0; j < nfa->num_states; j++) {
-                if (nfa->transition_function[i][symbol_index][j]) {
+                if (nfa->transition_function[i][symbol][j]) {
                     next_set[j] = 1;  // Valid next state
                 }
             }
@@ -546,7 +544,6 @@ int find_or_create_state(DFA *dfa, int *state_set, int **state_mapping, int *dfa
   for (int j = 0; j < MAX_STATES; j++) {
     state_mapping[*dfa_state_count][j] = state_set[j];
   }
-
   (*dfa_state_count)++;  // Increment the DFA state count
 
   return *dfa_state_count - 1;
@@ -586,20 +583,27 @@ DFA *NFA_to_DFA(NFA *nfa) {
 
             // Find or create the DFA state for this transition
             int next_dfa_state = find_or_create_state(dfa, next_set, state_mapping_ptr, &dfa_state_count);
-            if (memcmp(next_set, (int[MAX_STATES]){false}, MAX_STATES * sizeof(int)) != 0) {
-                setTransition(dfa, symbol, i, next_dfa_state);
+            bool is_empty = true;
+            for (int k = 0; k < MAX_STATES; k++) {
+                if (next_set[k] == 1) {
+                    is_empty = false;
+                    break;
+                }
             }
 
-            // Free next_set after processing
-            free(next_set);
+            if (!is_empty) {
+                char temp_symbol = (char)symbol;
+                setTransition(dfa, temp_symbol, i, next_dfa_state);
+            }
         }
     }
 
     // Identify and set DFA accepting states
     for (int i = 0; i < dfa_state_count; i++) {
         for (int j = 0; j < nfa->num_states; j++) {
-            if (state_mapping_ptr[i][j] && nfa->accepting_states[j]) {
-                dfa_accept_states[accept_state_count++] = i;
+            if (state_mapping_ptr[i][j] == 1 && nfa->accepting_states[j]) {
+                dfa_accept_states[accept_state_count] = i;
+                accept_state_count++;
                 break;
             }
         }
@@ -668,29 +672,29 @@ int main() {
   // free(dfa_d);
 
   // NFA (a) ends with 'gh'
-  NFA *nfa_a = NFA_a();
-
-  printf("Testing NFA for strings ending with 'gh':\n");
-  NFA_repl(nfa_a);
-  printf("\n");
-
-  // NFA (b) contains 'moo'
-  NFA *nfa_b = NFA_b();
-
-  printf("Testing NFA for strings containing 'moo':\n");
-  NFA_repl(nfa_b);
-  printf("\n");
-
-
-  // NFA (c) contains more than one 'a' or 'i', or more than two 'y's, or more
-  // than 3 'c's or 'l's
-  NFA *nfa_c = NFA_c();
-
-  printf("Testing NFA for strings that have more than one 'a' or 'i', or more "
-         "than two "
-         "'y's, or more than three 'c's or 'l's:\n");
-  NFA_repl(nfa_c);
-  printf("\n");
+  // NFA *nfa_a = NFA_a();
+  //
+  // printf("Testing NFA for strings ending with 'gh':\n");
+  // NFA_repl(nfa_a);
+  // printf("\n");
+  //
+  // // NFA (b) contains 'moo'
+  // NFA *nfa_b = NFA_b();
+  //
+  // printf("Testing NFA for strings containing 'moo':\n");
+  // NFA_repl(nfa_b);
+  // printf("\n");
+  //
+  //
+  // // NFA (c) contains more than one 'a' or 'i', or more than two 'y's, or more
+  // // than 3 'c's or 'l's
+  // NFA *nfa_c = NFA_c();
+  //
+  // printf("Testing NFA for strings that have more than one 'a' or 'i', or more "
+  //        "than two "
+  //        "'y's, or more than three 'c's or 'l's:\n");
+  // NFA_repl(nfa_c);
+  // printf("\n");
 
 
   // PART 3: NFA to DFA Conversion Output
@@ -700,9 +704,8 @@ int main() {
   printf("Converting NFA (strings ending with 'gh') to DFA...\n");
 
   // Convert the NFA to a DFA
+  NFA *nfa_a = NFA_a();
   DFA *dfa_from_nfa_gh = NFA_to_DFA(nfa_a);
-
-  printf("abc");
 
   // Print the number of states in the resulting DFA
   printf("DFA for strings ending with 'gh' has %d states.\n", dfa_from_nfa_gh->set_of_states);
